@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # 数据库服务
+  postgres:
+    image: postgres:15-alpine
+    container_name: photo-album-db
+    restart: always
+    environment:
+      POSTGRES_DB: photo_album
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - photo-album-network
+
+  # 应用服务
+  app:
+    build: .
+    container_name: photo-album-app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: photo_album
+      DB_USER: postgres
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      SUPER_PASSWORD: ${SUPER_PASSWORD}
+    volumes:
+      - ./server/uploads:/app/server/uploads
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+    networks:
+      - photo-album-network
+
+volumes:
+  postgres_data:
+
+networks:
+  photo-album-network:
+    driver: bridge

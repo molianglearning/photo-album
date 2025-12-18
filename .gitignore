@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+server/uploads/*
+!server/uploads/.gitkeep
+*.log
+.DS_Store
+logs/
+.pm2/
+package-release/
