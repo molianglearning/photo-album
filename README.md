@@ -169,9 +169,46 @@ photo-album/
 4. 图片编辑功能
 5. 更多优化...
 
+## 生产部署
+
+### 宝塔面板部署（推荐）
+
+详细步骤请查看：**[宝塔部署指南.md](./宝塔部署指南.md)**
+
+快速步骤：
+1. 本地打包：`npm run package` 或运行 `baota-deploy.bat`
+2. 上传到服务器 `/www/wwwroot/photo-album`
+3. 配置数据库和 `.env` 文件
+4. 运行：`bash baota-deploy.sh`
+5. 配置 Nginx 反向代理
+
+相关文档：
+- 📖 [DEPLOY_BAOTA.md](./DEPLOY_BAOTA.md) - 详细部署步骤
+- ✅ [BAOTA_CHECKLIST.md](./BAOTA_CHECKLIST.md) - 部署检查清单
+- 🚀 [宝塔部署指南.md](./宝塔部署指南.md) - 快速开始
+
+### 其他部署方式
+
+- **Railway**: 查看 [DEPLOYMENT.md](./DEPLOYMENT.md)
+- **Render**: 查看 [DEPLOY_RENDER.md](./DEPLOY_RENDER.md)
+- **通用部署**: 查看 [DEPLOY_EASY.md](./DEPLOY_EASY.md)
+
+### 打包命令
+
+```bash
+# 构建前端
+npm run build
+
+# 打包完整项目（包含前后端）
+npm run package
+```
+
+打包后的文件在 `package-release/` 目录，可直接部署到服务器。
+
 ## 注意事项
 
 - 确保 PostgreSQL 服务已启动
 - 首次运行需要执行数据库初始化脚本
 - 生产环境请修改 `.env` 中的密钥和密码
 - 上传的图片存储在 `server/uploads` 目录
+- 部署后立即修改所有默认密码

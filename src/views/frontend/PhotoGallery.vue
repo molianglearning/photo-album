@@ -27,6 +27,8 @@
           <img
             :src="`/uploads/${photo.file_name}`"
             :alt="photo.original_name"
+            loading="lazy"
+            decoding="async"
           />
         </div>
       </div>
@@ -52,6 +54,7 @@
         <img
           :src="`/uploads/${photos[currentIndex].file_name}`"
           :alt="photos[currentIndex].original_name"
+          @load="handleImageLoad"
         />
         <button
           v-if="currentIndex < photos.length - 1"
@@ -110,11 +113,17 @@ const goBack = () => {
 
 const touchStartX = ref(0)
 const touchEndX = ref(0)
+const imageLoaded = ref(false)
 
 const openLightbox = (index) => {
   currentIndex.value = index
   lightboxVisible.value = true
+  imageLoaded.value = false
   document.body.style.overflow = 'hidden'
+}
+
+const handleImageLoad = () => {
+  imageLoaded.value = true
 }
 
 const closeLightbox = () => {
@@ -265,6 +274,21 @@ onMounted(() => {
   overflow: hidden;
   cursor: pointer;
   background: #f0f0f0;
+  position: relative;
+}
+
+.photo-item::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ddd;
+  border-top-color: #999;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 .photo-item img {
@@ -272,6 +296,12 @@ onMounted(() => {
   height: 100%;
   object-fit: cover;
   display: block;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes spin {
+  to { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
 /* 灯箱样式 */
@@ -295,13 +325,17 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px 0;
 }
 
 .lightbox-content img {
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  max-height: 100vh;
   object-fit: contain;
+  display: block;
+  margin: auto;
 }
 
 .close-btn {

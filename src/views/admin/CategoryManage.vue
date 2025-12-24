@@ -13,12 +13,34 @@
         暂无分类，点击右上角添加
       </div>
       
-      <div v-else class="list">
+      <div v-else>
+        <div class="sort-tip">
+          💡 使用 ↑↓ 按钮调整排序
+        </div>
+        <div class="list">
         <div
-          v-for="category in categories"
+          v-for="(category, index) in categories"
           :key="category.id"
           class="list-item"
         >
+          <div class="sort-buttons">
+            <button 
+              class="sort-btn" 
+              @click="moveUp(index)"
+              :disabled="index === 0"
+              title="上移"
+            >
+              ↑
+            </button>
+            <button 
+              class="sort-btn" 
+              @click="moveDown(index)"
+              :disabled="index === categories.length - 1"
+              title="下移"
+            >
+              ↓
+            </button>
+          </div>
           <div v-if="category.cover_image" class="item-cover">
             <img :src="`/uploads/${category.cover_image}`" :alt="category.name" />
           </div>
@@ -31,6 +53,7 @@
             <button @click="deleteCategory(category.id)">删除</button>
           </div>
         </div>
+      </div>
       </div>
     </div>
     
@@ -69,7 +92,12 @@
             @change="handleCoverSelect"
           />
           
-          <div v-if="coverPreview" class="cover-preview">
+          <div v-if="compressing" class="compress-status">
+            <span class="compress-spinner"></span>
+            <span>压缩中...</span>
+          </div>
+          
+          <div v-else-if="coverPreview" class="cover-preview">
             <img :src="coverPreview" alt="封面预览" />
             <button type="button" class="remove-cover" @click="removeCover">
               ×
@@ -84,14 +112,14 @@
           >
             选择封面图片
           </button>
-          <p class="hint">建议尺寸：800x480，支持JPG、PNG格式，最大10MB</p>
+          <p class="hint">支持JPG、PNG格式，所有图片自动压缩到2MB以内</p>
         </div>
         
         <div class="dialog-actions">
-          <button class="btn-cancel" @click="closeDialog" :disabled="uploading">
+          <button class="btn-cancel" @click="closeDialog" :disabled="uploading || compressing">
             取消
           </button>
-          <button class="btn" @click="handleSubmit" :disabled="uploading">
+          <button class="btn" @click="handleSubmit" :disabled="uploading || compressing">
             {{ uploading ? '上传中...' : '确定' }}
           </button>
         </div>
@@ -104,6 +132,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/api'
+import imageCompression from 'browser-image-compression'
 
 const router = useRouter()
 
@@ -133,6 +162,44 @@ const loadCategories = async () => {
   }
 }
 
+const moveUp = async (index) => {
+  if (index === 0) return
+  
+  // 交换位置
+  const temp = categories.value[index]
+  categories.value[index] = categories.value[index - 1]
+  categories.value[index - 1] = temp
+  
+  // 保存排序
+  await saveSortOrder()
+}
+
+const moveDown = async (index) => {
+  if (index === categories.value.length - 1) return
+  
+  // 交换位置
+  const temp = categories.value[index]
+  categories.value[index] = categories.value[index + 1]
+  categories.value[index + 1] = temp
+  
+  // 保存排序
+  await saveSortOrder()
+}
+
+const saveSortOrder = async () => {
+  try {
+    const sortData = categories.value.map((cat, index) => ({
+      id: cat.id,
+      sort_order: index
+    }))
+    await api.sortCategories(sortData)
+  } catch (err) {
+    console.error('更新排序失败:', err)
+    alert('更新排序失败')
+    loadCategories()
+  }
+}
+
 const showAddDialog = () => {
   isEdit.value = false
   form.value = { id: null, name: '', description: '', cover_image: '' }
@@ -157,7 +224,9 @@ const editCategory = (category) => {
   dialogVisible.value = true
 }
 
-const handleCoverSelect = (event) => {
+const compressing = ref(false)
+
+const handleCoverSelect = async (event) => {
   const file = event.target.files[0]
   if (!file) return
   
@@ -166,19 +235,49 @@ const handleCoverSelect = (event) => {
     return
   }
   
-  if (file.size > 10 * 1024 * 1024) {
-    alert('图片大小不能超过10MB')
+  if (file.size > 50 * 1024 * 1024) {
+    alert('图片大小不能超过50MB')
     return
   }
   
-  coverFile.value = file
+  // 统一压缩到 2MB 以内，与照片上传保持一致
+  compressing.value = true
+  let processedFile = file
+  
+  try {
+    const options = {
+      maxSizeMB: 2,
+      maxWidthOrHeight: 2048,
+      useWebWorker: true,
+      fileType: 'image/jpeg',
+      initialQuality: 0.8
+    }
+    console.log(`开始压缩封面: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+    const compressedBlob = await imageCompression(file, options)
+    // 将 Blob 转换为 File 对象，确保有正确的文件名和类型
+    processedFile = new File([compressedBlob], `cover_${Date.now()}.jpg`, {
+      type: 'image/jpeg'
+    })
+    console.log(`压缩完成: ${(processedFile.size / 1024 / 1024).toFixed(2)}MB`)
+  } catch (err) {
+    console.error('压缩失败:', err)
+    // 压缩失败，如果原文件小于 5MB 则使用原文件
+    if (file.size > 5 * 1024 * 1024) {
+      alert('图片压缩失败且文件过大，请选择较小的图片')
+      compressing.value = false
+      return
+    }
+  }
+  
+  compressing.value = false
+  coverFile.value = processedFile
   
   // 预览图片
   const reader = new FileReader()
   reader.onload = (e) => {
     coverPreview.value = e.target.result
   }
-  reader.readAsDataURL(file)
+  reader.readAsDataURL(processedFile)
 }
 
 const removeCover = () => {
@@ -313,6 +412,18 @@ onMounted(() => {
   padding: 16px;
 }
 
+.sort-tip {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  text-align: center;
+  border: 1px solid #bbdefb;
+  user-select: none;
+}
+
 .loading,
 .empty {
   text-align: center;
@@ -333,6 +444,48 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  cursor: move;
+  transition: background 0.2s;
+}
+
+.list-item:hover {
+  background: #fafafa;
+}
+
+.sort-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+.sort-btn {
+  width: 32px;
+  height: 32px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.sort-btn:hover:not(:disabled) {
+  background: #e0e0e0;
+  border-color: #999;
+}
+
+.sort-btn:active:not(:disabled) {
+  background: #d0d0d0;
+  transform: scale(0.95);
+}
+
+.sort-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .item-cover {
@@ -490,6 +643,31 @@ onMounted(() => {
 .upload-btn:hover {
   border-color: #999;
   background: #fafafa;
+}
+
+.compress-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  background: #f5f5f5;
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  color: #666;
+}
+
+.compress-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ddd;
+  border-top-color: #333;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .hint {

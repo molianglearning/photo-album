@@ -23,11 +23,12 @@
           class="card category-item"
           @click="goToAlbums(category.id)"
         >
-          <div class="img-wrapper" style="padding-top: 60%;">
+          <div class="img-wrapper">
             <img
               v-if="category.cover_image"
               :src="`/uploads/${category.cover_image}`"
               :alt="category.name"
+              loading="lazy"
             />
           </div>
           <div class="card-body">
@@ -175,47 +176,50 @@ onMounted(() => {
 }
 
 .img-wrapper {
-  position: relative;
+  height: 144px;
   background: #f0f0f0;
+  overflow: hidden;
 }
 
 .img-wrapper img {
-  position: absolute;
-  top: 0;
-  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .card-body {
-  padding: 12px;
+  height: 48px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .card-body h3 {
   font-size: 14px;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.4;
 }
 
 .card-body p {
   font-size: 12px;
   color: #666;
-  line-height: 1.4;
+  line-height: 1.3;
+  margin: 2px 0 0 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
 }
 
 /* 桌面端文字大小 */
 @media (min-width: 769px) {
   .card-body {
-    padding: 16px;
+    padding: 10px 16px;
   }
   
   .card-body h3 {
@@ -223,7 +227,7 @@ onMounted(() => {
   }
   
   .card-body p {
-    font-size: 14px;
+    font-size: 13px;
   }
 }
 </style>

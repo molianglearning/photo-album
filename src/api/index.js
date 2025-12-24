@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 10000
+  timeout: 300000 // 5分钟超时，支持大文件上传
 })
 
 api.interceptors.request.use(config => {
@@ -137,7 +137,10 @@ export default {
   uploadPhotos(formData, onProgress) {
     return api.post('/admin/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: onProgress
+      onUploadProgress: onProgress,
+      timeout: 600000, // 10分钟超时，支持批量大文件上传
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
     })
   },
   
@@ -156,7 +159,10 @@ export default {
   // 上传封面图片
   uploadCover(formData) {
     return api.post('/admin/upload-cover', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000, // 5分钟超时
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
     })
   }
 }

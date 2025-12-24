@@ -15,19 +15,39 @@ const __dirname = path.dirname(__filename)
 
 const router = express.Router()
 
+import fs from 'fs'
+
+// 确保 uploads 目录存在
+const uploadsDir = path.join(__dirname, '../uploads/')
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true })
+  console.log('创建 uploads 目录:', uploadsDir)
+}
+
 // 配置文件上传
 const storage = multer.diskStorage({
-  destination: path.join(__dirname, '../uploads/'),
+  destination: (req, file, cb) => {
+    // 再次确保目录存在
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true })
+    }
+    cb(null, uploadsDir)
+  },
   filename: (req, file, cb) => {
-    const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9) + 
-                       path.extname(file.originalname)
+    // 处理中文文件名
+    const ext = path.extname(file.originalname) || '.jpg'
+    const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9) + ext
     cb(null, uniqueName)
   }
 })
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { 
+    fileSize: 100 * 1024 * 1024, // 单个文件最大 100MB（前端会压缩）
+    files: 100, // 最多 100 个文件
+    fieldSize: 100 * 1024 * 1024 // 字段大小限制
+  },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase())
@@ -212,6 +232,32 @@ router.delete('/admin/categories/:id', adminAuthMiddleware, async (req, res) => 
   }
 })
 
+// 更新分类排序
+router.post('/admin/categories/sort', adminAuthMiddleware, async (req, res) => {
+  try {
+    const { orders } = req.body
+    
+    if (!orders || !Array.isArray(orders)) {
+      return res.status(400).json({ message: '参数错误' })
+    }
+    
+    // 批量更新排序
+    await Promise.all(
+      orders.map(item => 
+        Category.update(
+          { sort_order: item.sort_order },
+          { where: { id: item.id } }
+        )
+      )
+    )
+    
+    res.json({ message: '排序更新成功' })
+  } catch (error) {
+    console.error('更新分类排序错误:', error)
+    res.status(500).json({ message: '服务器错误' })
+  }
+})
+
 // 相册管理
 router.get('/admin/albums', adminAuthMiddleware, async (req, res) => {
   try {
@@ -219,13 +265,21 @@ router.get('/admin/albums', adminAuthMiddleware, async (req, res) => {
       order: [['sort_order', 'ASC'], ['id', 'ASC']]
     })
     
-    console.log('=== 获取相册列表 ===')
-    console.log('相册数量:', albums.length)
-    albums.forEach(album => {
-      console.log(`相册 ${album.id}: ${album.name}, cover_image: ${album.cover_image}`)
-    })
+    // 获取每个相册的照片数量
+    const albumsWithCount = await Promise.all(
+      albums.map(async (album) => {
+        const photoCount = await Photo.count({ where: { album_id: album.id } })
+        return {
+          ...album.toJSON(),
+          photo_count: photoCount
+        }
+      })
+    )
     
-    res.json({ data: albums })
+    console.log('=== 获取相册列表 ===')
+    console.log('相册数量:', albumsWithCount.length)
+    
+    res.json({ data: albumsWithCount })
   } catch (error) {
     console.error('获取相册错误:', error)
     res.status(500).json({ message: '服务器错误' })
@@ -310,6 +364,32 @@ router.delete('/admin/albums/:id', adminAuthMiddleware, async (req, res) => {
   }
 })
 
+// 更新相册排序
+router.post('/admin/albums/sort', adminAuthMiddleware, async (req, res) => {
+  try {
+    const { orders } = req.body
+    
+    if (!orders || !Array.isArray(orders)) {
+      return res.status(400).json({ message: '参数错误' })
+    }
+    
+    // 批量更新排序
+    await Promise.all(
+      orders.map(item => 
+        Album.update(
+          { sort_order: item.sort_order },
+          { where: { id: item.id } }
+        )
+      )
+    )
+    
+    res.json({ message: '排序更新成功' })
+  } catch (error) {
+    console.error('更新相册排序错误:', error)
+    res.status(500).json({ message: '服务器错误' })
+  }
+})
+
 // 照片管理
 router.get('/admin/photos', adminAuthMiddleware, async (req, res) => {
   try {
@@ -331,21 +411,57 @@ router.get('/admin/photos', adminAuthMiddleware, async (req, res) => {
   }
 })
 
-router.post('/admin/upload', adminAuthMiddleware, upload.array('photos', 50), async (req, res) => {
+router.post('/admin/upload', adminAuthMiddleware, (req, res, next) => {
+  // 使用 multer 中间件并捕获错误
+  upload.array('photos', 50)(req, res, (err) => {
+    if (err) {
+      console.error('=== Multer 上传错误 ===')
+      console.error('错误类型:', err.name)
+      console.error('错误信息:', err.message)
+      console.error('错误代码:', err.code)
+      
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ message: '文件太大，单个文件不能超过 100MB' })
+      }
+      if (err.code === 'LIMIT_FILE_COUNT') {
+        return res.status(400).json({ message: '文件数量超过限制（最多50个）' })
+      }
+      if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+        return res.status(400).json({ message: '文件字段名错误' })
+      }
+      return res.status(500).json({ message: '文件上传失败: ' + err.message })
+    }
+    next()
+  })
+}, async (req, res) => {
   try {
+    console.log('=== 开始处理上传 ===')
+    console.log('请求体:', req.body)
+    console.log('文件数量:', req.files?.length || 0)
+    
     const { album_id } = req.body
     
     if (!album_id) {
+      console.error('错误: 缺少相册ID')
       return res.status(400).json({ message: '缺少相册ID' })
     }
     
     if (!req.files || req.files.length === 0) {
+      console.error('错误: 没有上传文件')
       return res.status(400).json({ message: '没有上传文件' })
     }
+    
+    console.log('相册ID:', album_id)
+    console.log('上传文件列表:')
+    req.files.forEach((file, i) => {
+      console.log(`  ${i + 1}. ${file.originalname} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+    })
     
     const maxOrder = await Photo.max('sort_order', {
       where: { album_id }
     }) || 0
+    
+    console.log('当前最大排序:', maxOrder)
     
     const photos = await Promise.all(
       req.files.map((file, index) => 
@@ -359,10 +475,14 @@ router.post('/admin/upload', adminAuthMiddleware, upload.array('photos', 50), as
       )
     )
     
+    console.log('上传成功，创建了', photos.length, '条记录')
     res.json({ data: photos, message: '上传成功' })
   } catch (error) {
-    console.error('上传照片错误:', error)
-    res.status(500).json({ message: '服务器错误' })
+    console.error('=== 数据库保存错误 ===')
+    console.error('错误类型:', error.name)
+    console.error('错误信息:', error.message)
+    console.error('错误堆栈:', error.stack)
+    res.status(500).json({ message: '保存失败: ' + error.message })
   }
 })
 
@@ -405,6 +525,32 @@ router.delete('/admin/photos', adminAuthMiddleware, async (req, res) => {
     res.json({ message: '删除成功' })
   } catch (error) {
     console.error('删除照片错误:', error)
+    res.status(500).json({ message: '服务器错误' })
+  }
+})
+
+// 更新照片排序
+router.post('/admin/photos/sort', adminAuthMiddleware, async (req, res) => {
+  try {
+    const { orders } = req.body
+    
+    if (!orders || !Array.isArray(orders)) {
+      return res.status(400).json({ message: '参数错误' })
+    }
+    
+    // 批量更新排序
+    await Promise.all(
+      orders.map(item => 
+        Photo.update(
+          { sort_order: item.sort_order },
+          { where: { id: item.id } }
+        )
+      )
+    )
+    
+    res.json({ message: '排序更新成功' })
+  } catch (error) {
+    console.error('更新照片排序错误:', error)
     res.status(500).json({ message: '服务器错误' })
   }
 })

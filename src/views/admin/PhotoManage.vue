@@ -2,7 +2,7 @@
   <div class="admin-page">
     <header class="header">
       <button class="back-btn" @click="goBack">← 返回</button>
-      <h1>照片管理</h1>
+      <h1>{{ selectedAlbumName() ? `${selectedAlbumName()} - 照片` : '照片管理' }}</h1>
     </header>
     
     <div class="content">
@@ -28,14 +28,18 @@
           style="display: none"
           @change="handleFileSelect"
         />
-        <button class="btn" @click="$refs.fileInput.click()">
-          选择照片上传
+        <button class="btn" @click="$refs.fileInput.click()" :disabled="uploadProgress > 0 && uploadProgress < 100">
+          {{ uploadProgress > 0 && uploadProgress < 100 ? '上传中...' : '选择照片上传' }}
         </button>
         
         <div v-if="uploadProgress > 0 && uploadProgress < 100" class="progress">
           <div class="progress-bar" :style="{ width: uploadProgress + '%' }"></div>
-          <span class="progress-text">{{ uploadProgress }}%</span>
+          <span class="progress-text">
+            {{ uploadProgress <= 30 ? '压缩中...' : '上传中...' }} {{ uploadProgress }}%
+          </span>
         </div>
+        
+        <p class="hint">支持批量上传，所有图片自动压缩到 2MB 以内</p>
       </div>
       
       <div v-if="loading" class="loading">加载中...</div>
@@ -70,6 +74,8 @@
             <img
               :src="`/uploads/${photo.file_name}`"
               :alt="photo.original_name"
+              loading="lazy"
+              decoding="async"
             />
             <div v-if="selectedPhotos.includes(photo.id)" class="check-mark">
               ✓
@@ -82,11 +88,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import api from '@/api'
+import imageCompression from 'browser-image-compression'
 
 const router = useRouter()
+const route = useRoute()
 
 const albums = ref([])
 const photos = ref([])
@@ -96,14 +104,35 @@ const loading = ref(false)
 const uploadProgress = ref(0)
 const fileInput = ref(null)
 
+// 获取当前选中相册的名称
+const selectedAlbumName = () => {
+  if (!selectedAlbumId.value) return null
+  const album = albums.value.find(a => a.id === parseInt(selectedAlbumId.value))
+  return album ? album.name : null
+}
+
 const loadAlbums = async () => {
   try {
     const res = await api.adminGetAlbums()
     albums.value = res.data
+    
+    // 如果 URL 有 album 参数，自动选中
+    if (route.query.album) {
+      selectedAlbumId.value = route.query.album
+      loadPhotos()
+    }
   } catch (err) {
     console.error('加载相册失败:', err)
   }
 }
+
+// 监听 URL 参数变化
+watch(() => route.query.album, (newAlbumId) => {
+  if (newAlbumId && newAlbumId !== selectedAlbumId.value) {
+    selectedAlbumId.value = newAlbumId
+    loadPhotos()
+  }
+})
 
 const loadPhotos = async () => {
   if (!selectedAlbumId.value) {
@@ -128,20 +157,64 @@ const handleFileSelect = async (event) => {
   const files = Array.from(event.target.files)
   if (files.length === 0) return
   
-  const formData = new FormData()
-  formData.append('album_id', selectedAlbumId.value)
-  
-  files.forEach(file => {
-    formData.append('photos', file)
-  })
-  
-  uploadProgress.value = 0
+  uploadProgress.value = 1
   
   try {
+    // 统一压缩配置：所有图片压缩到 2MB 以内
+    const compressOptions = {
+      maxSizeMB: 2,
+      maxWidthOrHeight: 2048,
+      useWebWorker: true,
+      fileType: 'image/jpeg',
+      initialQuality: 0.8
+    }
+    
+    const compressedFiles = []
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      uploadProgress.value = Math.round(((i + 0.5) / files.length) * 50)
+      
+      try {
+        // 所有图片都压缩，确保上传成功
+        console.log(`压缩 ${file.name}: ${(file.size / 1024 / 1024).toFixed(2)}MB`)
+        const compressedFile = await imageCompression(file, compressOptions)
+        compressedFiles.push(compressedFile)
+        console.log(`完成: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`)
+      } catch (err) {
+        console.error(`压缩失败 ${file.name}:`, err)
+        // 压缩失败，如果原文件小于 5MB 则使用原文件
+        if (file.size < 5 * 1024 * 1024) {
+          compressedFiles.push(file)
+        } else {
+          alert(`${file.name} 压缩失败且文件过大，已跳过`)
+        }
+      }
+    }
+    
+    if (compressedFiles.length === 0) {
+      alert('没有可上传的图片')
+      uploadProgress.value = 0
+      return
+    }
+    
+    uploadProgress.value = 50
+    
+    // 创建表单数据
+    const formData = new FormData()
+    formData.append('album_id', selectedAlbumId.value)
+    compressedFiles.forEach((file, index) => {
+      // 确保文件有正确的名称和类型
+      const fileName = `photo_${Date.now()}_${index}.jpg`
+      const blob = new Blob([file], { type: 'image/jpeg' })
+      formData.append('photos', blob, fileName)
+    })
+    
+    console.log('准备上传', compressedFiles.length, '个文件到相册', selectedAlbumId.value)
+    
+    // 上传
     await api.uploadPhotos(formData, (progressEvent) => {
-      uploadProgress.value = Math.round(
-        (progressEvent.loaded * 100) / progressEvent.total
-      )
+      const uploadPercent = Math.round((progressEvent.loaded * 50) / progressEvent.total)
+      uploadProgress.value = 50 + uploadPercent
     })
     
     uploadProgress.value = 100
@@ -149,13 +222,11 @@ const handleFileSelect = async (event) => {
       uploadProgress.value = 0
     }, 1000)
     
-    // 清空文件输入
     event.target.value = ''
-    
-    // 重新加载照片列表
     loadPhotos()
   } catch (err) {
-    alert(err.response?.data?.message || '上传失败')
+    console.error('上传失败:', err)
+    alert(err.response?.data?.message || err.message || '上传失败')
     uploadProgress.value = 0
   }
 }
@@ -243,6 +314,18 @@ select.input {
   margin-bottom: 16px;
 }
 
+.upload-section .hint {
+  font-size: 12px;
+  color: #999;
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+.upload-section .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .progress {
   margin-top: 12px;
   height: 32px;
@@ -328,6 +411,21 @@ select.input {
   position: relative;
 }
 
+.photo-item::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ddd;
+  border-top-color: #999;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  z-index: 0;
+}
+
 .photo-item.selected {
   outline: 3px solid #333;
 }
@@ -337,6 +435,12 @@ select.input {
   height: 100%;
   object-fit: cover;
   display: block;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes spin {
+  to { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
 .check-mark {

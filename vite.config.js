@@ -10,7 +10,9 @@ export default defineConfig({
     }
   },
   server: {
+    host: '0.0.0.0', // 允许外部访问
     port: 5173,
+    allowedHosts: ['.ngrok-free.dev', '.ngrok.io', '.loca.lt', 'all'],
     proxy: {
       '/api': {
         target: 'http://localhost:3000',

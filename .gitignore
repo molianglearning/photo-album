@@ -8,3 +8,8 @@ server/uploads/*
 logs/
 .pm2/
 package-release/
+
+# SQLite 数据库文件
+*.sqlite
+*.sqlite3
+*.db

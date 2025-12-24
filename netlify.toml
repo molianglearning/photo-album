@@ -1,0 +1,36 @@
+[build]
+  # 构建命令
+  command = "npm run build"
+  # 发布目录
+  publish = "dist"
+  # 函数目录
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+# 重定向规则 - 支持前端路由
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/uploads/*"
+  to = "/.netlify/functions/uploads"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# 环境变量（生产环境）
+[context.production.environment]
+  NODE_ENV = "production"
+  DB_PATH = "/tmp/database.sqlite"
+
+# 环境变量（预览环境）
+[context.deploy-preview.environment]
+  NODE_ENV = "production"
+  DB_PATH = "/tmp/database.sqlite"

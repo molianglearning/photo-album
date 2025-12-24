@@ -4,6 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>私密相册</title>
+  <!-- 开发环境：移动端调试工具 -->
+  <script>
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      // 在非 localhost 访问时加载 Eruda（移动端调试）
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/eruda';
+      script.onload = function() {
+        eruda.init();
+        console.log('📱 移动端调试工具已启动');
+        console.log('点击右下角图标打开调试面板');
+      };
+      document.head.appendChild(script);
+    }
+  </script>
 </head>
 <body>
   <div id="app"></div>

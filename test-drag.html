@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>拖拽排序测试</title>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+    }
+    
+    h1 {
+      color: #333;
+    }
+    
+    .list {
+      list-style: none;
+      padding: 0;
+    }
+    
+    .list-item {
+      background: #fff;
+      padding: 16px;
+      margin-bottom: 8px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: move;
+      transition: background 0.2s;
+    }
+    
+    .list-item:hover {
+      background: #fafafa;
+    }
+    
+    .drag-handle {
+      font-size: 20px;
+      color: #999;
+      cursor: grab;
+      user-select: none;
+    }
+    
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+    
+    .sortable-ghost {
+      opacity: 0.4;
+      background: #f0f0f0;
+    }
+    
+    .item-content {
+      flex: 1;
+    }
+    
+    .status {
+      margin-top: 20px;
+      padding: 10px;
+      background: #f0f0f0;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>拖拽排序功能测试</h1>
+  <p>按住 ☰ 图标拖动项目进行排序</p>
+  
+  <div id="list" class="list">
+    <div class="list-item" data-id="1">
+      <div class="drag-handle">☰</div>
+      <div class="item-content">
+        <h3>分类 1</h3>
+        <p>这是第一个分类</p>
+      </div>
+    </div>
+    <div class="list-item" data-id="2">
+      <div class="drag-handle">☰</div>
+      <div class="item-content">
+        <h3>分类 2</h3>
+        <p>这是第二个分类</p>
+      </div>
+    </div>
+    <div class="list-item" data-id="3">
+      <div class="drag-handle">☰</div>
+      <div class="item-content">
+        <h3>分类 3</h3>
+        <p>这是第三个分类</p>
+      </div>
+    </div>
+    <div class="list-item" data-id="4">
+      <div class="drag-handle">☰</div>
+      <div class="item-content">
+        <h3>分类 4</h3>
+        <p>这是第四个分类</p>
+      </div>
+    </div>
+  </div>
+  
+  <div class="status">
+    <strong>状态：</strong>
+    <span id="status">等待拖拽...</span>
+  </div>
+  
+  <script>
+    const el = document.getElementById('list');
+    const statusEl = document.getElementById('status');
+    
+    const sortable = Sortable.create(el, {
+      animation: 150,
+      handle: '.drag-handle',
+      ghostClass: 'sortable-ghost',
+      onStart: function(evt) {
+        statusEl.textContent = '正在拖拽...';
+      },
+      onEnd: function(evt) {
+        const oldIndex = evt.oldIndex;
+        const newIndex = evt.newIndex;
+        
+        if (oldIndex === newIndex) {
+          statusEl.textContent = '位置未改变';
+          return;
+        }
+        
+        statusEl.textContent = `从位置 ${oldIndex + 1} 移动到位置 ${newIndex + 1}`;
+        
+        // 获取当前顺序
+        const items = Array.from(el.children);
+        const order = items.map((item, index) => {
+          return {
+            id: item.dataset.id,
+            position: index + 1
+          };
+        });
+        
+        console.log('新顺序:', order);
+      }
+    });
+    
+    console.log('Sortable 初始化成功:', sortable);
+  </script>
+</body>
+</html>
